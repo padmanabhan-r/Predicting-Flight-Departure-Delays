@@ -17,14 +17,12 @@ knitr::opts_chunk$set(
   cache = FALSE,         
   fig.align = "center"   
 )
-
 ```
 
+# 1) Loading Libraries and Reading Input Data
 
 
 ```{r}
-# Loading Libraries and Reading Input Data
-
 library(tidyverse)       
 library(dplyr)
 library(nycflights13)
@@ -36,14 +34,14 @@ library(corrplot)
 
 fltrain <- read_csv("Project652/fltrain.csv.gz")
 fltest <- read_csv("Project652/fltest.csv.gz")
-
 ```
 
-```{r, echo = FALSE}
-# Data Preprocessing
+# 2) Data Preprocessing
 
-##Adding some new features. Adding the `flag` feature based on 
-##which the data will later be split into training and test set.
+Adding some new features. Adding the `flag` feature based on which the data will later be split into training and test set.
+
+```{r, echo = FALSE}
+
 
 fltrain <- fltrain %>% mutate(season = factor(quarters(time_hour)), 
                               time_of_day = cut(hour,c(0,3,7,12,16,21,24), 
@@ -58,7 +56,6 @@ fltrain <- fltrain %>% mutate(season = factor(quarters(time_hour)),
                               flag = "TR")
 
 levels(fltrain$season) <- c("Winter","Spring","Summer","Fall")
-
 ```
 
 
@@ -77,50 +74,43 @@ fltest <- fltest %>% mutate(season = factor(quarters(time_hour)),
                               flag = "TE")
 
 levels(fltest$season) <- c("Winter","Spring","Summer","Fall")
-
 ```
 
 
+Merging Train and Test set for data-preprocessing. Will be split later based on flag.
 
 ```{r}
-## Merging Train and Test set for data-preprocessing. 
-## Will be split later based on flag.
-
 dataset <- merge(fltrain, fltest, all=TRUE)
 ```
 
+## Renaming some columns.
 
 
 ```{r}
-## Renaming some columns.
 dataset <- dataset %>% 
   dplyr::rename(
     year = year.x,
     plane_manfactr_yr = year.y
     )
-
 ```
 
-
-
-```{r}
 ## Sorting by date by each airport. This is done to impute NAs in weather related features. 
 ## The NAs are replaced with the most recent occurance.
+
+```{r}
 dataset <- arrange(dataset, origin, year ,month,day,sched_dep_time)
 dim(dataset)
-
 ```
-
-
-```{r}
 ## Converting Chr features to Factors
-flights_data <- as.data.frame(unclass(dataset))
-
-```
 
 
 ```{r}
+flights_data <- as.data.frame(unclass(dataset))
+```
+
 ## Replacing weather related features with NA with the most recent non-NA prior to it.
+
+```{r}
 flights_data$temp <- na.locf(flights_data$temp)
 flights_data$dewp <- na.locf(flights_data$dewp)
 flights_data$humid <- na.locf(flights_data$humid)
@@ -129,62 +119,57 @@ flights_data$wind_speed <- na.locf(flights_data$wind_speed)
 flights_data$precip <- na.locf(flights_data$precip)
 flights_data$pressure <- na.locf(flights_data$pressure)
 flights_data$visib <- na.locf(flights_data$visib)
-
 ```
 
-
-```{r}
 ## Checking the % of NAs in each column
-apply(flights_data, 2, function(col)sum(is.na(col))/length(col) * 100)
-
-```
 
 
 ```{r}
+apply(flights_data, 2, function(col)sum(is.na(col))/length(col) * 100)
+```
+
 ## Rule of thumb 5% and removing features.
+
+```{r}
 flights_data <- flights_data%>% 
   select(-wind_gust,-plane_manfactr_yr,-manufacturer,
          -engines, -speed, -engine, 
          -type, -model, -seats)
-
 ```
+
+## Complete case analysis. Removing any rows with at least one NA
 
 
 ```{r}
-## Complete case analysis. Removing any rows with at least one NA
 flights_data <- na.omit(flights_data)
 dim(flights_data)
-
 ```
 
+# 3) Exploratory Data Analysis
 
+Multi Histogram on some numeric features
 
 ```{r}
-# Exploratory Data Analysis
-
-## Multi Histogram on some numeric features
 fl_temp <- flights_data %>% select(-year,-month,-day, -hour, -minute, -tz)
 multi.hist(fl_temp[,sapply(fl_temp, is.numeric)])
-
 ```
 Some heavily skewed features : dep_delay, arr_delay, precip, visib, alt
 
 
+Corplot to analyse correlations
+
 ```{r}
-## Corplot to analyse correlations
 col_res = cor(fl_temp[, sapply(fl_temp, is.numeric)],
     use = "complete.obs", method = "pearson")
 corrplot(col_res ,method="circle")
 fl_temp <- NULL #deleting the temp dataframe
-
 ```
 
+Response variable(dep_delay) Histogram
 
 ```{r}
-## Response variable(dep_delay) Histogram
 ggplot(data = flights_data, aes(x = dep_delay)) + geom_histogram(color="red", bins = 500)
 boxplot(flights_data$dep_delay, xlab="Boxplot dep_delay")
-
 ```
 
 The departure delays variable is highly right-skewed.
@@ -194,134 +179,132 @@ range(flights_data$dep_delay)
 fivenum(flights_data$dep_delay)
 quantile(flights_data$dep_delay,probs = c(0, 0.01,0.05,0.1,0.25,.5,.75,.90,.95,.99, 1))
 mean(flights_data$dep_delay >= 60)
-
 ```
+
+Top 10 delays
 
 
 ```{r}
-## Top 10 delays
 flights_data%>% arrange(desc(dep_delay)) %>% head(10)
-
 ```
 
 
+Summaries of departure delay by NYC airport
 
 ```{r}
-## Summaries of departure delay by NYC airport
 flights_data %>% group_by(origin) %>% 
   dplyr::summarize(n=n(),Median = median(dep_delay),
                    Third_Quartile = quantile(dep_delay,probs=.75), 
                    Max = max(dep_delay)) %>% 
   arrange(desc(Third_Quartile)) %>% head(10) 
-
 ```
 
+
+Summaries of departure delay by season
+
 ```{r}
-## Summaries of departure delay by season
 flights_data %>% group_by(season) %>% 
   dplyr::summarize(n=n(),Median = median(dep_delay),
                    Third_Quartile = quantile(dep_delay,probs=.75), 
                    Max = max(dep_delay)) %>% 
   arrange(desc(Third_Quartile)) %>% head(10) 
-
 ```
 
 
+Summaries of departure delay by time of day
+
 ```{r}
-## Summaries of departure delay by time of day
 flights_data %>% group_by(time_of_day) %>% 
   dplyr::summarize(n=n(),Median = median(dep_delay),
                    Third_Quartile = quantile(dep_delay,probs=.75), 
                    Max = max(dep_delay)) %>% 
   arrange(desc(Third_Quartile)) %>% head(10) 
-
 ```
 
+Summaries of departure delay by NYC airport and season
+
 ```{r}
-## Summaries of departure delay by NYC airport and season
 flights_data %>% group_by(origin, season) %>% 
   dplyr::summarize(n=n(),Median = median(dep_delay),
                    Third_Quartile = quantile(dep_delay,probs=.75), 
                    Max = max(dep_delay)) %>% 
   arrange(desc(Third_Quartile)) %>% head(10) 
-
 ```
 
+Summaries of departure delay by NYC airport and time of day
+
 ```{r}
-## Summaries of departure delay by NYC airport and time of day
 flights_data %>% group_by(origin, time_of_day) %>% 
   dplyr::summarize(n=n(),Median = median(dep_delay),
                    Third_Quartile = quantile(dep_delay,probs=.75), 
                    Max = max(dep_delay)) %>% 
   arrange(desc(Third_Quartile)) %>% head(10) 
-
 ```
 
+Summaries of departure delay by airline (carrier)
+
 ```{r}
-## Summaries of departure delay by airline (carrier)
 flights_data %>% group_by(carrier) %>% 
   dplyr::summarize(n=n(),Median = median(dep_delay),
                    Third_Quartile = quantile(dep_delay,probs=.75), 
                    Max = max(dep_delay)) %>% 
   arrange(desc(Third_Quartile)) %>% head(10) 
-
 ```
 
+Summaries of departure delay by origin and carrier
+
 ```{r}
-## Summaries of departure delay by origin and carrier
 flights_data %>% group_by(origin,carrier) %>% 
   dplyr::summarize(n=n(),Median = median(dep_delay),
                    Third_Quartile = quantile(dep_delay,probs=.75), 
                    Max = max(dep_delay)) %>% 
   arrange(desc(Third_Quartile)) %>% head(10)
-
 ```
 
+Summaries of departure delay by dest and carrier
+
 ```{r}
-## Summaries of departure delay by dest and carrier
 flights_data %>% group_by(dest,carrier) %>% 
   dplyr::summarize(n=n(),Median = median(dep_delay),
                    Third_Quartile = quantile(dep_delay,probs=.75), 
                    Max = max(dep_delay)) %>% 
   arrange(desc(Third_Quartile)) %>% head(10) 
-
 ```
 
+Summaries of departure delay by date
+
 ```{r}
-## Summaries of departure delay by date
 flights_data %>% group_by(month,day) %>% 
   dplyr::summarize(n=n(),Median = mean(dep_delay),Max = max(dep_delay)) %>%
   arrange(desc(Median)) %>% head(10)
-
 ```
 
+Summaries of departure delay by precipitation
+
 ```{r}
-## Summaries of departure delay by precipitation
 flights_data %>% mutate(haveprecip = factor(precip>0)) %>% group_by(haveprecip) %>% 
   dplyr::summarize(n=n(),Median = median(dep_delay),
                    Third_Quartile = quantile(dep_delay,probs=.75), 
                    Max = max(dep_delay)) %>% 
   arrange(desc(Median)) %>% head(10) 
-
 ```
 
+# 4) Data wrangling
 
+
+Mapping `dep_delay` mapping to ranks
 
 ```{r}
-# Data wrangling
 
-## Mapping `dep_delay` mapping to ranks
 den <- nrow(flights_data)+1
 flights_data <- flights_data %>% mutate(dep_delay = rank(dep_delay)/den)
 ggplot(flights_data,aes(x=dep_delay)) + geom_histogram(binwidth=.01)
-
 ```
 
-
+Removing features that are either heavily correlated with another variable or represented by other vaiables.
 
 ```{r}
-## Removing features that are either heavily correlated with another variable 
-## or represented by other vaiables.
+
 library(lubridate)
 flights_data <- flights_data %>% 
   mutate(dep_date = make_date(year,month,day)) %>% 
@@ -329,12 +312,12 @@ flights_data <- flights_data %>%
          -sched_arr_time,-air_time, -tz, 
          -dst, -tzone, -tailnum, -hour, 
          -minute, -time_hour, -name, -lat, -lon)
-
 ```
 
 
+Relationships between departure delay and other quantitative predictors
+
 ```{r,cache=TRUE,eval=FALSE}
-## Relationships between departure delay and other quantitative predictors
 ggplot(flights_data,aes(x=dep_date,y=dep_delay)) + 
   geom_point(alpha=.01) + geom_smooth()
 ggplot(flights_data,aes(x=sched_dep_time,y=dep_delay)) + 
@@ -359,22 +342,20 @@ ggplot(flights_data,aes(x=visib,y=dep_delay)) +
   geom_point(alpha=0.01) + geom_smooth()
 ggplot(flights_data,aes(x=alt,y=dep_delay)) + 
   geom_point(alpha=0.01) + geom_smooth()
-
 ```
 
+
+Replace alt and dist with log(alt) and log(dist)
+
 ```{r}
-## Replace alt and dist with log(alt) and log(dist)
 flights_data <- mutate(flights_data,
                        logdistance = log(distance)) %>% select(-distance)
 flights_data <- mutate(flights_data,
                        logalt = log(alt)) %>% select(-alt)
-
 ```
-
-
+Converting `dest` to numeric
 
 ```{r}
-## Converting `dest` to numeric
 dest_numeric <- as.numeric(flights_data$dest)
 flights_data <- mutate(flights_data, dest = dest_numeric)
 
@@ -383,14 +364,14 @@ flights_train = flights_data %>% filter(flag == "TR") %>%
   select(-flag, -logalt, -delay)
 flights_test = flights_data %>% filter(flag == "TE") %>% 
   select(-flag, -logalt, -delay)
-
 ```
 
+# 5) Learning methods
 
+Dataframe to save model metrics
 
 ```{r}
-# Learning methods
-## data frame to save model metrics
+
 
 models <- data.frame(Model=character(),
                  MSE=numeric(), 
@@ -399,10 +380,9 @@ models <- data.frame(Model=character(),
 ```
 
 
-```{r,cache=TRUE}
-# Learning methods
-
 ## Generalized Additive Model (GAM)
+
+```{r,cache=TRUE}
 library(gam)
 form <- formula(dep_delay ~ s(dep_date) + s(sched_dep_time) + carrier + 
                   origin + s(flight) + s(dest) + s(logdistance) + 
@@ -418,12 +398,12 @@ cat("MSE:",mse_gam,"RMSE:",sqrt(mse_gam))
 models[nrow(models) + 1,] = c("GAM", 
                               round(mse_gam, digits=5), 
                               round(sqrt(mse_gam), digits=5))
-
 ```
 
 
-```{r,cache=TRUE}
 ## Gradient boosting (GBM)
+
+```{r,cache=TRUE}
 library(gbm)
 dep_date_numeric <- as.numeric(flights_train$dep_date)
 dep_date_numeric <- dep_date_numeric - mean(dep_date_numeric)
@@ -443,12 +423,11 @@ cat("MSE:",mse_gbm,"RMSE:",sqrt(mse_gbm))
 models[nrow(models) + 1,] = c("GBM", 
                               round(mse_gbm, digits=5), 
                               round(sqrt(mse_gbm), digits=5))
-
 ```
 
+## Multiple Regression Model
 
 ```{r}
-## Multiple Regression Model
 lm_fit <- step(lm(dep_delay ~. , data = flights_train), direction ="both")
 summary(lm_fit)
 lm_pred <- predict(lm_fit,newdata=flights_test)
@@ -458,11 +437,11 @@ cat("MSE:",mse_lm,"RMSE:",sqrt(mse_lm))
 models[nrow(models) + 1,] = c("LM", 
                               round(mse_lm, digits=5), 
                               round(sqrt(mse_lm), digits=5))
-
 ```
 
-```{r}
 ## Model Matrix Creation
+
+```{r}
 library(glmnet)
 
 flights_train <- flights_train[, c(2,1,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)]
@@ -473,12 +452,10 @@ y = flights_train[,"dep_delay"]
 
 x_te = model.matrix(dep_delay~.-1, data=flights_test)
 y_te = flights_test[,"dep_delay"]
-
 ```
-
+## Ridge Regression Model
 
 ```{r}
-## Ridge Regression Model
 ridge_fit <- glmnet(x,y,alpha=0)
 plot(ridge_fit,xvar="lambda",label=TRUE)
 cv.ridge = cv.glmnet(x,y,alpha=0)
@@ -495,13 +472,11 @@ print("Ridge::CV")
 cat("MSE:",mse_ridge,"RMSE:",sqrt(mse_ridge))
 models[nrow(models) + 1,] = c("Ridge::CV", 
                               round(mse_ridge, digits=5), round(sqrt(mse_ridge), digits=5))
-
 ```
 
-### Lasso Regression Model
+## Lasso Regression Model
 
 ```{r}
-## Lasso Regression Model
 lasso_fit <- glmnet(x,y,alpha=1)
 plot(lasso_fit,xvar="lambda",label=TRUE)
 cv.lasso = cv.glmnet(x,y,alpha=1)
@@ -520,14 +495,11 @@ cat("MSE:",mse_lasso,"RMSE:",sqrt(mse_lasso))
 models[nrow(models) + 1,] = c("Lasso::CV", 
                               round(mse_lasso, digits=5), 
                               round(sqrt(mse_lasso), digits=5))
-
 ```
 
-
-### XGBoost
+## XGBoost Model
 
 ```{r, eval=FALSE}
-## XGBoost
 library(xgboost)
 library(magrittr)
 
@@ -548,13 +520,11 @@ models[nrow(models) + 1,] = c("XGBoost",
                               round(sqrt(mse_xgb), digits=5))
 imp = xgb.importance(colnames(train_matrix), model=xgb_fit)
 print(imp)
-
 ```
 
 Comparison of models
 
-```{r, eval=FALSE}
+```{r}
 ## Model Performance
 print(models)
-
 ```
