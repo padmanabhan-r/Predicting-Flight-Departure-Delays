@@ -333,7 +333,7 @@ flights_data <- flights_data %>%
 ```
 
 
-```{r,cache=TRUE}
+```{r,cache=TRUE,eval=FALSE}
 ## Relationships between departure delay and other quantitative predictors
 ggplot(flights_data,aes(x=dep_date,y=dep_delay)) + 
   geom_point(alpha=.01) + geom_smooth()
@@ -526,7 +526,7 @@ models[nrow(models) + 1,] = c("Lasso::CV",
 
 ### XGBoost
 
-```{r}
+```{r, eval=FALSE}
 ## XGBoost
 library(xgboost)
 library(magrittr)
